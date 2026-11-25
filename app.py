@@ -269,9 +269,6 @@ def admin_user_new():
     return render_template("admin_user_form.html", form=form, roles=ROLES,
                            buildings=buildings, selected=selected)
 
-
-@app.route("/admin/users/<email>/toggle", methods=["POST"])
-@role_required("admin")
 @app.route("/admin/users/<email>/edit", methods=["GET", "POST"])
 @role_required("admin")
 def admin_user_edit(email):
@@ -328,6 +325,8 @@ def admin_user_edit(email):
 
     return render_template("admin_user_edit.html", email=email, form=form,
                            roles=ROLES, buildings=buildings, selected=selected)
+@app.route("/admin/users/<email>/toggle", methods=["POST"])
+@role_required("admin")
 def admin_user_toggle(email):
     email = email.lower()
     if email == session["user_id"]:
