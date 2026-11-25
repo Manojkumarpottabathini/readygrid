@@ -55,7 +55,7 @@ def logout():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    return render_template("dashboard.html")
+    return render_template("dashbrd.html")
 
 
 @app.route("/admin")
