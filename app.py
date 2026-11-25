@@ -272,6 +272,62 @@ def admin_user_new():
 
 @app.route("/admin/users/<email>/toggle", methods=["POST"])
 @role_required("admin")
+@app.route("/admin/users/<email>/edit", methods=["GET", "POST"])
+@role_required("admin")
+def admin_user_edit(email):
+    email = email.lower()
+    user = users_table.get_item(Key={"email": email}).get("Item")
+    if not user:
+        abort(404)
+
+    buildings = sorted(scan_all(buildings_table), key=lambda b: b["buildingId"])
+    valid_ids = {b["buildingId"] for b in buildings}
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        role = request.form.get("role", "").strip()
+        selected = request.form.getlist("buildingIds")
+
+        error = None
+        if not name:
+            error = "Full name is required."
+        elif role not in ROLES:
+            error = "Choose a role."
+        elif email == session["user_id"] and role != "admin":
+            error = "You cannot change your own role."
+        elif role != "admin" and not selected:
+            error = "Choose at least one building for this user."
+        elif any(b not in valid_ids for b in selected):
+            error = "One of the selected buildings does not exist."
+
+        if not error:
+            try:
+                users_table.update_item(
+                    Key={"email": email},
+                    UpdateExpression="SET #n = :n, #r = :r, #b = :b, #u = :u",
+                    ExpressionAttributeNames={
+                        "#n": "name", "#r": "role",
+                        "#b": "buildingIds", "#u": "updatedAt",
+                    },
+                    ExpressionAttributeValues={
+                        ":n": name, ":r": role,
+                        ":b": [] if role == "admin" else selected,
+                        ":u": now_iso(),
+                    },
+                )
+                flash(f"{email} updated.", "success")
+                return redirect(url_for("admin_users"))
+            except ClientError:
+                app.logger.exception("User update failed")
+                error = "Could not save the user. Please try again."
+        flash(error, "danger")
+        form = {"name": name, "role": role}
+    else:
+        form = {"name": user.get("name", ""), "role": user.get("role", "")}
+        selected = list(user.get("buildingIds", []))
+
+    return render_template("admin_user_edit.html", email=email, form=form,
+                           roles=ROLES, buildings=buildings, selected=selected)
 def admin_user_toggle(email):
     email = email.lower()
     if email == session["user_id"]:

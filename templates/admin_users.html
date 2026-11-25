@@ -26,6 +26,9 @@
         {% endif %}
       </td>
       <td>
+      <td class="d-flex gap-2">
+        <a class="btn btn-sm btn-outline-primary"
+           href="{{ url_for('admin_user_edit', email=u.email) }}">Edit</a>
         {% if u.email != session.get('user_id') %}
         <form method="post" action="{{ url_for('admin_user_toggle', email=u.email) }}">
           <button class="btn btn-sm btn-outline-secondary">
@@ -33,6 +36,7 @@
           </button>
         </form>
         {% endif %}
+      </td>
       </td>
     </tr>
   {% endfor %}
