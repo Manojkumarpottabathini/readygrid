@@ -1,6 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Admin - ReadyGrid{% endblock %}
 {% block content %}
-<h1 class="h3">Admin area</h1>
-<p>Only administrators can see this page.</p>
+<h1 class="h3 mb-4">Admin area</h1>
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card"><div class="card-body">
+      <div class="display-6">{{ building_count }}</div>
+      <p class="mb-2">Buildings</p>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('admin_buildings') }}">Manage buildings</a>
+    </div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card"><div class="card-body">
+      <div class="display-6">{{ user_count }}</div>
+      <p class="mb-2">Users</p>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('admin_users') }}">Manage users</a>
+    </div></div>
+  </div>
+</div>
 {% endblock %}

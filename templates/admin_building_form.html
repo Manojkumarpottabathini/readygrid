@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if editing else 'Add' }} building - ReadyGrid{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">{{ 'Edit building' if editing else 'Add building' }}</h1>
+
+<form method="post" class="col-md-7 p-0">
+  <div class="mb-3">
+    <label class="form-label" for="buildingId">Building ID</label>
+    <input class="form-control" id="buildingId" name="buildingId"
+           value="{{ form.buildingId }}" placeholder="e.g. B002"
+           {{ 'readonly' if editing else 'required' }}>
+    <div class="form-text">Short unique code. It cannot be changed after the building is created.</div>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="name">Building name</label>
+    <input class="form-control" id="name" name="name" value="{{ form.name }}" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="address">Address or campus</label>
+    <input class="form-control" id="address" name="address" value="{{ form.address }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="floors">Floors</label>
+    <input class="form-control" id="floors" name="floors" value="{{ form.floors }}"
+           placeholder="Ground, First, Second" required>
+    <div class="form-text">Separate floors with commas.</div>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="coordinatorId">Safety coordinator</label>
+    <select class="form-select" id="coordinatorId" name="coordinatorId">
+      <option value="">None yet</option>
+      {% for c in coordinators %}
+      <option value="{{ c.email }}" {% if c.email == form.coordinatorId %}selected{% endif %}>
+        {{ c.name }} ({{ c.email }})
+      </option>
+      {% endfor %}
+    </select>
+    <div class="form-text">Only active users with the coordinator role are listed.</div>
+  </div>
+  <button class="btn btn-primary">Save</button>
+  <a class="btn btn-link" href="{{ url_for('admin_buildings') }}">Cancel</a>
+</form>
+{% endblock %}

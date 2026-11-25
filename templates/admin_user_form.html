@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Add user - ReadyGrid{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Add user</h1>
+
+<form method="post" class="col-md-7 p-0">
+  <div class="mb-3">
+    <label class="form-label" for="name">Full name</label>
+    <input class="form-control" id="name" name="name" value="{{ form.name }}" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="email">Email (used to log in)</label>
+    <input class="form-control" type="email" id="email" name="email" value="{{ form.email }}" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="role">Role</label>
+    <select class="form-select" id="role" name="role" required>
+      <option value="">Choose a role</option>
+      {% for r in roles %}
+      <option value="{{ r }}" {% if r == form.role %}selected{% endif %}>{{ r }}</option>
+      {% endfor %}
+    </select>
+    <div class="form-text">Administrators can see every building, so no building choice is needed for them.</div>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Buildings this user can access</label>
+    {% if buildings %}
+      {% for b in buildings %}
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="buildingIds"
+               value="{{ b.buildingId }}" id="b-{{ b.buildingId }}"
+               {% if b.buildingId in selected %}checked{% endif %}>
+        <label class="form-check-label" for="b-{{ b.buildingId }}">
+          {{ b.name }} ({{ b.buildingId }})
+        </label>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="text-muted mb-0">No buildings exist yet. Add a building first.</p>
+    {% endif %}
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="password">Password (at least 8 characters)</label>
+    <input class="form-control" type="password" id="password" name="password" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label" for="repeat">Repeat password</label>
+    <input class="form-control" type="password" id="repeat" name="repeat" required>
+  </div>
+  <button class="btn btn-primary">Create user</button>
+  <a class="btn btn-link" href="{{ url_for('admin_users') }}">Cancel</a>
+</form>
+{% endblock %}

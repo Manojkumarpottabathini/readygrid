@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Buildings - ReadyGrid{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Buildings</h1>
+  <a class="btn btn-primary" href="{{ url_for('admin_building_new') }}">Add building</a>
+</div>
+
+{% if buildings %}
+<div class="table-responsive">
+<table class="table table-striped align-middle">
+  <thead>
+    <tr><th>ID</th><th>Name</th><th>Address</th><th>Floors</th><th>Coordinator</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for b in buildings %}
+    <tr>
+      <td>{{ b.buildingId }}</td>
+      <td>{{ b.name }}</td>
+      <td>{{ b.get('address', '') }}</td>
+      <td>{{ b.get('floors', [])|join(', ') }}</td>
+      <td>{{ names.get(b.get('coordinatorId', ''), b.get('coordinatorId') or '-') }}</td>
+      <td><a class="btn btn-sm btn-outline-secondary"
+             href="{{ url_for('admin_building_edit', building_id=b.buildingId) }}">Edit</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="text-muted">No buildings yet. Add your first one.</p>
+{% endif %}
+{% endblock %}
