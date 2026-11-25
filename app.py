@@ -1,5 +1,6 @@
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 
 from flask import (Flask, render_template, request, redirect, url_for,
@@ -7,7 +8,9 @@ from flask import (Flask, render_template, request, redirect, url_for,
 from werkzeug.security import check_password_hash, generate_password_hash
 from botocore.exceptions import ClientError
 
-from db import users_table, buildings_table, dynamodb, scan_all
+from boto3.dynamodb.conditions import Key
+from db import (users_table, buildings_table, categories_table,
+                checklist_table, dynamodb, scan_all, query_all)
 from auth import login_required, role_required
 
 app = Flask(__name__)
@@ -363,3 +366,217 @@ def forbidden(e):
 @app.errorhandler(404)
 def not_found(e):
     return render_template("404.html"), 404
+
+# ------------------------------------------------------------------ checklist
+WEIGHTS = {"Critical": 3, "Important": 2, "Normal": 1}
+WEIGHT_LABELS = {v: k for k, v in WEIGHTS.items()}
+
+STARTER_ITEMS = [
+    {"itemName": "First-aid kit", "categoryId": "first-aid", "requiredQty": 1,
+     "hasExpiry": True, "weight": 3, "checkIntervalDays": 30},
+    {"itemName": "Fire extinguisher", "categoryId": "fire-safety", "requiredQty": 1,
+     "hasExpiry": True, "weight": 3, "checkIntervalDays": 30},
+    {"itemName": "Smoke detector", "categoryId": "fire-safety", "requiredQty": 1,
+     "hasExpiry": False, "weight": 2, "checkIntervalDays": 90},
+    {"itemName": "Emergency torch", "categoryId": "emergency-kits", "requiredQty": 2,
+     "hasExpiry": False, "weight": 2, "checkIntervalDays": 30},
+    {"itemName": "Emergency lighting", "categoryId": "emergency-lighting", "requiredQty": 1,
+     "hasExpiry": False, "weight": 2, "checkIntervalDays": 30},
+    {"itemName": "Emergency exit sign", "categoryId": "evacuation-signage", "requiredQty": 1,
+     "hasExpiry": False, "weight": 2, "checkIntervalDays": 30},
+    {"itemName": "Assembly-point sign", "categoryId": "evacuation-signage", "requiredQty": 1,
+     "hasExpiry": False, "weight": 1, "checkIntervalDays": 90},
+    {"itemName": "Evacuation plan displayed", "categoryId": "evacuation-signage", "requiredQty": 1,
+     "hasExpiry": False, "weight": 1, "checkIntervalDays": 90},
+    {"itemName": "Emergency contact list posted", "categoryId": "contacts-documents", "requiredQty": 1,
+     "hasExpiry": False, "weight": 1, "checkIntervalDays": 90},
+    {"itemName": "Fire alarm test log", "categoryId": "contacts-documents", "requiredQty": 1,
+     "hasExpiry": False, "weight": 2, "checkIntervalDays": 90},
+]
+
+
+def new_item_id():
+    return "ITM-" + uuid.uuid4().hex[:8].upper()
+
+
+def get_building_or_404(building_id):
+    building = buildings_table.get_item(Key={"buildingId": building_id}).get("Item")
+    if not building:
+        abort(404)
+    return building
+
+
+def load_categories():
+    return sorted(scan_all(categories_table), key=lambda c: c.get("name", ""))
+
+
+def checklist_for(building_id):
+    items = query_all(checklist_table,
+                      KeyConditionExpression=Key("buildingId").eq(building_id))
+    for it in items:
+        it["weightLabel"] = WEIGHT_LABELS.get(int(it.get("weight", 1)), "Normal")
+    return items
+
+
+def in_range(text, low, high):
+    return text.isdigit() and low <= int(text) <= high
+
+
+def read_item_form(building, categories):
+    f = request.form
+    form = {
+        "itemName": f.get("itemName", "").strip(),
+        "floor": f.get("floor", "").strip(),
+        "categoryId": f.get("categoryId", "").strip(),
+        "requiredQty": f.get("requiredQty", "").strip(),
+        "weightLabel": f.get("weightLabel", "").strip(),
+        "checkIntervalDays": f.get("checkIntervalDays", "").strip(),
+        "hasExpiry": f.get("hasExpiry") == "on",
+    }
+    floors = ["All"] + list(building.get("floors", []))
+    error = None
+    if not form["itemName"]:
+        error = "Item name is required."
+    elif form["floor"] not in floors:
+        error = "Choose a floor from the list."
+    elif form["categoryId"] not in {c["categoryId"] for c in categories}:
+        error = "Choose a category from the list."
+    elif not in_range(form["requiredQty"], 1, 999):
+        error = "Minimum quantity must be a whole number from 1 to 999."
+    elif form["weightLabel"] not in WEIGHTS:
+        error = "Choose a weight."
+    elif not in_range(form["checkIntervalDays"], 1, 365):
+        error = "Check interval must be a whole number of days from 1 to 365."
+    return form, error
+
+
+def item_data_from_form(form):
+    return {
+        "itemName": form["itemName"],
+        "floor": form["floor"],
+        "categoryId": form["categoryId"],
+        "requiredQty": int(form["requiredQty"]),
+        "hasExpiry": form["hasExpiry"],
+        "weight": WEIGHTS[form["weightLabel"]],
+        "checkIntervalDays": int(form["checkIntervalDays"]),
+    }
+
+
+@app.route("/admin/buildings/<building_id>/checklist")
+@role_required("admin")
+def admin_checklist(building_id):
+    building = get_building_or_404(building_id)
+    cats = {c["categoryId"]: c.get("name", c["categoryId"]) for c in load_categories()}
+    items = sorted(checklist_for(building_id),
+                   key=lambda i: (i.get("floor", ""), i.get("categoryId", ""),
+                                  i.get("itemName", "")))
+    return render_template("admin_checklist.html",
+                           building=building, items=items, cats=cats)
+
+
+@app.route("/admin/buildings/<building_id>/checklist/new", methods=["GET", "POST"])
+@role_required("admin")
+def admin_checklist_new(building_id):
+    building = get_building_or_404(building_id)
+    categories = load_categories()
+    form = {"itemName": "", "floor": "All", "categoryId": "", "requiredQty": "1",
+            "weightLabel": "Important", "checkIntervalDays": "30", "hasExpiry": False}
+
+    if request.method == "POST":
+        form, error = read_item_form(building, categories)
+        if not error:
+            try:
+                item = item_data_from_form(form)
+                item.update({"buildingId": building_id, "itemId": new_item_id(),
+                             "createdAt": now_iso()})
+                checklist_table.put_item(
+                    Item=item, ConditionExpression="attribute_not_exists(itemId)")
+                flash(f"Added {form['itemName']}.", "success")
+                return redirect(url_for("admin_checklist", building_id=building_id))
+            except ClientError:
+                app.logger.exception("Checklist item save failed")
+                error = "Could not save the item. Please try again."
+        flash(error, "danger")
+
+    return render_template("admin_checklist_form.html", building=building, form=form,
+                           categories=categories, weights=list(WEIGHTS), editing=False)
+
+
+@app.route("/admin/buildings/<building_id>/checklist/<item_id>/edit",
+           methods=["GET", "POST"])
+@role_required("admin")
+def admin_checklist_edit(building_id, item_id):
+    building = get_building_or_404(building_id)
+    item = checklist_table.get_item(
+        Key={"buildingId": building_id, "itemId": item_id}).get("Item")
+    if not item:
+        abort(404)
+    categories = load_categories()
+
+    if request.method == "POST":
+        form, error = read_item_form(building, categories)
+        if not error:
+            try:
+                data = item_data_from_form(form)
+                data["updatedAt"] = now_iso()
+                names = {f"#a{n}": key for n, key in enumerate(data)}
+                values = {f":v{n}": val for n, val in enumerate(data.values())}
+                expression = "SET " + ", ".join(f"#a{n} = :v{n}" for n in range(len(data)))
+                checklist_table.update_item(
+                    Key={"buildingId": building_id, "itemId": item_id},
+                    UpdateExpression=expression,
+                    ExpressionAttributeNames=names,
+                    ExpressionAttributeValues=values,
+                )
+                flash(f"Updated {form['itemName']}.", "success")
+                return redirect(url_for("admin_checklist", building_id=building_id))
+            except ClientError:
+                app.logger.exception("Checklist item update failed")
+                error = "Could not save the item. Please try again."
+        flash(error, "danger")
+    else:
+        form = {
+            "itemName": item.get("itemName", ""),
+            "floor": item.get("floor", "All"),
+            "categoryId": item.get("categoryId", ""),
+            "requiredQty": str(int(item.get("requiredQty", 1))),
+            "weightLabel": WEIGHT_LABELS.get(int(item.get("weight", 1)), "Normal"),
+            "checkIntervalDays": str(int(item.get("checkIntervalDays", 30))),
+            "hasExpiry": bool(item.get("hasExpiry")),
+        }
+
+    return render_template("admin_checklist_form.html", building=building, form=form,
+                           categories=categories, weights=list(WEIGHTS), editing=True)
+
+
+@app.route("/admin/buildings/<building_id>/checklist/<item_id>/delete", methods=["POST"])
+@role_required("admin")
+def admin_checklist_delete(building_id, item_id):
+    get_building_or_404(building_id)
+    checklist_table.delete_item(Key={"buildingId": building_id, "itemId": item_id})
+    flash("Item deleted.", "success")
+    return redirect(url_for("admin_checklist", building_id=building_id))
+
+
+@app.route("/admin/buildings/<building_id>/checklist/starter", methods=["POST"])
+@role_required("admin")
+def admin_checklist_starter(building_id):
+    get_building_or_404(building_id)
+    if checklist_for(building_id):
+        flash("This building already has checklist items.", "warning")
+        return redirect(url_for("admin_checklist", building_id=building_id))
+
+    known = {c["categoryId"] for c in load_categories()}
+    missing = {s["categoryId"] for s in STARTER_ITEMS} - known
+    if missing:
+        flash("These categories are missing from the Categories table: "
+              + ", ".join(sorted(missing)), "danger")
+        return redirect(url_for("admin_checklist", building_id=building_id))
+
+    with checklist_table.batch_writer() as batch:
+        for starter in STARTER_ITEMS:
+            batch.put_item(Item={**starter, "buildingId": building_id,
+                                 "itemId": new_item_id(), "floor": "All",
+                                 "createdAt": now_iso()})
+    flash(f"Added {len(STARTER_ITEMS)} starter items.", "success")
+    return redirect(url_for("admin_checklist", building_id=building_id))

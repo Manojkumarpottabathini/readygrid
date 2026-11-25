@@ -20,8 +20,12 @@
       <td>{{ b.get('address', '') }}</td>
       <td>{{ b.get('floors', [])|join(', ') }}</td>
       <td>{{ names.get(b.get('coordinatorId', ''), b.get('coordinatorId') or '-') }}</td>
-      <td><a class="btn btn-sm btn-outline-secondary"
-             href="{{ url_for('admin_building_edit', building_id=b.buildingId) }}">Edit</a></td>
+            <td class="d-flex gap-2">
+        <a class="btn btn-sm btn-outline-secondary"
+           href="{{ url_for('admin_building_edit', building_id=b.buildingId) }}">Edit</a>
+        <a class="btn btn-sm btn-outline-primary"
+           href="{{ url_for('admin_checklist', building_id=b.buildingId) }}">Checklist</a>
+      </td>
     </tr>
   {% endfor %}
   </tbody>

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Checklist - {{ building.name }} - ReadyGrid{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">Checklist: {{ building.name }}</h1>
+    <div class="text-muted">{{ building.buildingId }} &middot; Floors: {{ building.get('floors', [])|join(', ') }}</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin_buildings') }}">Back</a>
+    <a class="btn btn-primary" href="{{ url_for('admin_checklist_new', building_id=building.buildingId) }}">Add item</a>
+  </div>
+</div>
+
+{% if items %}
+<div class="table-responsive">
+<table class="table table-striped align-middle">
+  <thead>
+    <tr><th>Item</th><th>Floor</th><th>Category</th><th>Min qty</th><th>Expiry</th><th>Weight</th><th>Check every (days)</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for i in items %}
+    <tr>
+      <td>{{ i.itemName }}</td>
+      <td>{{ i.floor }}</td>
+      <td>{{ cats.get(i.categoryId, i.categoryId) }}</td>
+      <td>{{ i.requiredQty }}</td>
+      <td>{{ 'Yes' if i.hasExpiry else 'No' }}</td>
+      <td><span class="badge text-bg-{{ {'Critical': 'danger', 'Important': 'warning', 'Normal': 'secondary'}[i.weightLabel] }}">{{ i.weightLabel }}</span></td>
+      <td>{{ i.checkIntervalDays }}</td>
+      <td class="d-flex gap-2">
+        <a class="btn btn-sm btn-outline-secondary"
+           href="{{ url_for('admin_checklist_edit', building_id=building.buildingId, item_id=i.itemId) }}">Edit</a>
+        <form method="post" onsubmit="return confirm('Delete this item?');"
+              action="{{ url_for('admin_checklist_delete', building_id=building.buildingId, item_id=i.itemId) }}">
+          <button class="btn btn-sm btn-outline-danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="text-muted small">{{ items|length }} item(s). Floor "All" means the item applies to the whole building.</p>
+{% else %}
+<div class="card"><div class="card-body">
+  <p class="mb-3">This building has no checklist items yet. Add items one by one, or start from a ready-made list of 10 common emergency items that you can edit afterwards.</p>
+  <form method="post" action="{{ url_for('admin_checklist_starter', building_id=building.buildingId) }}">
+    <button class="btn btn-primary">Add starter checklist</button>
+  </form>
+</div></div>
+{% endif %}
+{% endblock %}
